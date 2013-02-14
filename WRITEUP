@@ -1,0 +1,2167 @@
+Title: Writeup for Project 3, Fall 2010
+Date : 10/31/2010
+Group Number: 58
+
+Name				   				Email					Student Id 
+Naveen Bangalore NanjundaPrasad	   			nbangalo@usc.edu				5752-7730-16
+Vishak Nag Ashoka		  			ashoka@usc.edu      				9791-1175-66
+Jida Wen			   			jidawen@usc.edu     				6412-1395-84 
+
+------------------
+I. Requirements:
+------------------
+
+      ----------------------
+      + Gerneral Objective:
+      ----------------------
+
+	-----------
+	  Part 1
+	-----------  
+
+	+ Implementation of  Software Management of the TLB.
+
+
+		The TLB must be implemented to handle TLB misses. The state of the TLB must be
+		kept intact whenever context switch happens. On a context Switch, the TLB must
+		be invalidated. Also, the page table is required to maintain dirty and use flags
+		for each page. The test cases like matmult should return a value of 7220 after
+		successful completion of the TLB. Also, multiple instances of matmult should also
+		return the same value 7220.
+	
+	-----------
+	  Part 2
+	-----------
+
+	+ Implementation of  Virtual Memory.
+
+		This implementation requires that the page should be moved from the memory to back
+		to the disk. The swap file is used to maintain the contents page moved from the memory
+		to the disk. A single swap file is maintained for the entire Nachos. The swapfile contains
+		only the pages that are marked dirty in the TLB. When the memory is full, it is required to
+		remove a page from memory using either random or FIFO page replacement algorithm. The
+		Numphyspages is set to 32.
+
+	-----------
+	  Part 3
+	-----------
+	
+	+ Implement remote procedure calls(RPC) for the system networking 
+		
+		+ The RPC function for lock and conditionvariable
+			
+			In case of networking, we need a server and a client. All of them have different machineID 
+			and inside the machineID we have different mailboxNumber represent different threads of a 
+			process. So we need to make them able to communicate with each other. All the lock and 
+			conditionvariable information is stored inside the server and the client cannot	know detail 
+			inside the server. So the way for the client to use these resource is through these RPC.
+			It is shows how the sever deal with all the requests and upkeep the information of entities 
+			like the lock or conditionvariables.
+		
+		+ The RPC function for monitor variables
+			
+			While implement RPC for the locks and Conditionvariables which is based on the systemcall done 
+			by project2, we also need to implement RPC for the monitor variables. This part is different from
+			project 2, which client does not hold the monitor variable any more. So we need to design the RPC
+			to make a way for client to create, retrieve and set them. And it is also required that server
+			is able to manage these resource since the monitor variables are also like the locks or condition
+			variables which are shared data and no longer belong to a specific client.
+------------------
+II. Assumption:
+------------------
+	+ Assume the monitor variables are all integers
+	+ Assume each machine konw the machineID and maiboxNumber of themselves and server
+	+ Assume the client konw the index number of Lock or Condition when the want to use it in testcase
+------------------
+III. Design:
+------------------
+
+	------------------------------------------------------------------------
+	+ Implementation of  Software Management of the TLB and  Virtual Memory
+	------------------------------------------------------------------------
+
+	When a page fault exception arises the IPT entries are looked into to check
+	if the virtual page number in BadVRegister is present in the IPT. If it is 
+	not present then another page fault exception raises and the page has to be 
+	loaded into TLB and the IPT. For this, the page table with offset and location
+	of each page in address space is computed initially and stored in the page table.
+	This page table is looked into to check if the page is present in the executable
+	or swap file or niether. If it is present in the executable the page is read from
+	the appropriate offset and a bit map find is made and loaded into memory. If the
+	page is present in swap file then it a dirty page which is previously written into
+	the swap file. Here again a bit map find is made and the page is loaded into the 
+	memory. If the location of the page is neither then it is a stack or uninitialized 
+	data, it is loaded into appropriate main memory location. If a page is dirty and 
+	if it is in main memory and it has to be removed then the page will be saved in the 
+	swap file. The scheme used to select a page from main memory is either random or
+	fifo. In random scheme a page is selected randomly for replacement, whereas the 
+	fifo scheme selects the page last in the queue. In this scheme when a page is loaded
+	into memory its physical page number is appended to the queue and the page number
+	at the end of queue is selected for replacement. Whenever a context switch occurs 
+	the TLB and IPT are invalidated.
+
+	-----------------------------------------------------------------
+	+ Implement remote procedure calls(RPC) for the system networking /part 3
+	-----------------------------------------------------------------	  
+	  + The RPC function for lock and conditionvariable:
+		
+		+ Design of Lock Create RPC
+			
+			As what is write in project 2, when we what to use a lock we need to create it first. As in 
+			networking mode, the client and server is seperate and client cannot know the actual data in
+			the server they need to communicate with message which is already implemented by nachos. As 
+			what we do in the project 2 when we useprogram run a system call we firsrt validate its value 
+			passed to the kernel. However in network, we cannot validate all the parameter passed to the 
+			RPC in client side. Some information must validate in the server like the lock index. Yet there 
+			is some	value can check by the client in the client kernel like the virtual address. So we check
+			these arguments such as the virtual address and length before we send message to server to call
+			the RPC. In RPC which is in the server side, we extract the parameter we need for the RPC call
+			and create the lock in server data base. Then we return the index value	which is store in a message. 
+			And if the RPC call is failure caused by some invalid parameter we also store the failure
+			information into the message and finally send it back to the client side for it to make decision.
+			
+		+ Design of Lock Acquire RPC
+			
+			When a client needs to acquire a lock, what it passed is not a lockname or virtual address, it's a lock index
+			value which indicated for the lock stored inside the server side. As client cannot validate this index value
+			so it just pass this parameter to the server. And after server receive this value, it validate it which is 
+			quite similar to the procedure of project 2. If it is invalid then send a failure message to the client. If this
+			lock exist, we check the destroy bit, if it is true we cannot acquire it.¡¡After that we need to check its status
+			through the lock structure if it is busy then we put this message in a queue like the lock waiting queue and do not
+			send it. If this lock is available we just update the lock structure and send back a successful message to the client.
+		
+		+ Design of Lock Release RPC
+			
+			The lock release RPC is quite similar like lock acquire at the beginning. It also needs to validate the value 
+			passed by the client with the same procedure. And send back failure message to the client if the arguement is 
+			invalid. If it is valid we need check the queue consist of message. If there is some message inside means some 
+			other client is waiting for this lock, we need to pass this lock to that client by changing the lock structure and
+			send back a message to that client. If there is no waiting client we need to check the destroy bit, which indicates 
+			whether this lock is going to be destroyed. Then we free this lock if no need to destroy it or destroy it when that
+			flag is true. Of course we send a message back to the client at the end.
+			
+		+ Design of Lock Destroy RPC
+			
+			Because the lock is shared value, so every client can call once a destroy lock RPC. Hence we should make a destroy
+			counter to show whether this lock is going to be destroyed instead of destroy flag as what we did in project 2. And
+			with this counter we can stop the lock acquire RPC when this lock is going to be destroyed Also we have usage counter
+			as indicator as whether this lock is in use. If it is not in use we just destroy the lock. If it is in use we can set
+			the destroy counter	and destroy the lock later when we release the lock.
+			
+		+ Design of Conditionvariable Create RPC
+		
+			It is very similar with what we did for the Lock Create RPC. Since the Condtion is shared by all the clients, there
+			should be a Condition name like the name of the lock. Every client can use this name to issue a create condition RPC
+			and the return value should be the index number of the condition variable. And like the lock we need a different but
+			similar condition structure which represent the condition variable database and it does not have status since there
+			is no status for conditions. But it should include the condition lock of each condition variable. And the send back
+			message should be failure message or the index value of create condition. 
+	
+		+ Design of Conditionvariable Wait RPC
+			
+			To call this RPC from client, it not only needs the condition variable index also the lock index for this condition 
+			variable. So in the server we should not only validate the condition index value but also invalidate the lock index.
+			Further more we also should check whether these two value matches. As the first one into the condition waiting queue,
+			it needs to set the condition lock value. The server also should maintain that condition waiting queue which also
+			consist a line of reply message. At last it should decide whether to send back the failure message or put the message
+			to the queue and hold it if success.
+			
+		+ Design of Conditionvariable Signal RPC
+		
+			Similar to the Condition wait RPC, for condition signal server also need the both the condition index and the lock 
+			index related to this call. After argument validation, it will check the condition waiting queue. If it is not empty,
+			we need to take the first waiting reply message and send it to the client and then issue a acquire lock for this
+			specific client. Cause we have already validate the parameter of this client so when we acquire we just check the lock
+			status.	If success we just give the lock owner and if the lock is busy we need to put the success message to the lock 
+			waiting queue.
+			
+		+ Design of Conditionvariable Broadcast RPC
+			
+			The first procedure is very like the condition signal. According what we did for the sync.cc for broadcast we just
+			need to use a while loop and the condition to quit is the condition waiting queue is empty. For each iteration we call
+			a condition signal and while looping we need make the condition signal RPC do not send back message, so we use a broadcast
+			flag to indicate that. And send a back message to client after all the signal is done.
+			
+		+ Design of Conditioncariable Destroy RPC
+			
+			Similar with destroy lock, after validation we do not destroy the condition variable directly. We just decrease
+			the destroy counter and indicate this condition is going to be destroyed if it is now currently in use.
+			After this counter decrease to zero we actually destroy it here or inside condition signal RPC. At last we return the 
+			destroyed condition index no matter it is in use or not.
+	
+
+---------------------
+VI. Implementation:
+---------------------
+
+	+ Files modified	  
+	 
+	  + For Part 1 and Part 2
+
+		-- Exception.cc
+		-- system.cc
+		-- system.h
+		-- main.cc
+		-- addrspace.cc
+	  	-- addrspace.h
+		-- progtest.cc
+
+	  + For Part 3
+
+		 -- Exception.cc
+		 -- nettest.cc
+		 -- testfiles.c
+		 -- system.cc
+		 -- system.h
+		 -- main.cc
+		 -- syscall.h
+		 -- rpctest.c
+
+	+ Data Structures added, and the file they were added to. 
+
+	  + For Part 1 and Part 2
+
+		class pageTableWithOffset				-- added in addrspace.h
+		{
+			public: int whereisthepage; 
+			// 0 ---> In Executable
+			// 1 ---> In Swap File
+			// 2 ---> Neither ( case like uninitialized data and stack )
+			
+			int offset; 
+			// store the offset of each page 
+		};
+
+		class IPTEntry : public TranslationEntry		-- added in system.h
+		{
+			public:
+				int processID;
+			
+				IPTEntry();
+				~IPTEntry();
+		
+		 
+		};
+
+	  
+	  + For Part 3					--- all these data structures were added to nettest.cc
+	
+		struct serverSecretLocks
+		{
+			char *lockName;
+			int machineID;
+			int mailBoxNumber;
+			int status;
+			int toBeDestroyedCount;
+			int usageCounter; 
+		};
+
+		struct serverSecretCVs
+		{
+			char *cvName;
+			int machineID;
+			int mailBoxNumber;
+			int cvLockIndex;
+			int toBeDestroyedCount;
+			int usageCounter; 
+		};
+
+
+		struct serverSecretMVs
+		{
+			char *mvName;
+			int machineID;
+			int mailBoxNumber;
+			int mvLockIndex;
+			int toBeDestroyedCount;
+			int usageCounter; 
+		};
+		
+		struct lockWaitEntry
+		{
+			char *replymessage;
+			PacketHeader replyOutPktHdr;
+			MailHeader replyOutMailHdr;
+		};
+
+		struct cvWaitEntry
+		{
+			char *replymessage;
+			PacketHeader replyOutPktHdr;
+			MailHeader replyOutMailHdr;
+		};
+
+
+	+ Functions added and in which file. 
+
+	  + For Part 1 and Part 2
+
+		void updateTLB(int ppn)		-- added in exception.cc
+		{
+
+
+		}
+
+		int findIptIndex(int vpn)	-- added in exception.cc
+		{
+		
+		}
+
+		int evictAPage(int pageToEvict)  -- added in exception.cc
+		{
+
+		}
+
+		void AddrSpace :: updatePtOffset(int vpn)	-- added in addrspace.cc
+		{
+
+		}
+
+		int AddrSpace::loadPageIntoIPT(int vpn)		-- added in addrspace.cc
+		{
+		
+		}
+		
+
+
+	  + For Part 3								--added in file nettest.cc
+	
+	void CreateLockRPC(char *name, int senderMachineID, int senderMailBoxNumber) {
+	
+	}
+	void AcquireLockRPC(int lockIndex, int senderMachineID, int senderMailBoxNumber) {
+
+	}
+	void ReleaseLockRPC(int lockIndex, int senderMachineID, int senderMailBoxNumber) {
+
+	}
+	void CreateCVRPC(char *name, int senderMachineID, int senderMailBoxNumber) {
+
+	}
+	void CVWaitRPC(int cvIndex, int lockIndex, int senderMachineID, int senderMailBoxNumber){
+
+	}
+	void CVSignalRPC(int cvIndex, int lockIndex, int senderMachineID, int senderMailBoxNumber){
+
+	}
+	void ServerHeart() {
+
+	}
+	
+	+ Functions modified and in which file. 
+
+	  + For Part 1 and Part 2
+
+
+	  AddrSpace::AddrSpace(OpenFile *executable) : fileTable(MaxOpenFiles)  -- modified in addrspace.cc
+	  {
+
+	  }
+
+	  AddrSpace::~AddrSpace()			-- modified in addrspace.cc
+	{
+	
+	}
+	
+	void AddrSpace::RestoreState()			-- modified in addrspace.cc
+	{
+	
+	}
+	  
+	pageTableWithOffset* AddrSpace::GetPageTableRef()	-- modified in addrspace.cc
+	{
+
+	}
+
+	void AddrSpace::SetPageTableRef(pageTableWithOffset *newPageTable)	-- modified in addrspace.cc
+	{
+
+	}
+
+	
+	void AddrSpace::DeletePageTable()		-- modified in addrspace.cc
+	{
+	
+	}
+
+
+
+	+ For Part 3									--modified in exception.cc 
+	
+	int CreateLock_Syscall(unsigned int vaddr, int len){
+
+	}
+	
+	int Acquire_Syscall(unsigned int lockIndex) {
+
+	}
+	
+	int Release_Syscall(unsigned int lockIndex) {
+
+	}
+	
+	int DestroyLock_Syscall(unsigned int lockIndex) {
+
+	}
+	int CreateCV_Syscall(unsigned int vaddr, int len) {
+
+	}
+	
+	int Wait_Syscall(unsigned int CVIndex, unsigned int lockIndex) {
+
+	}
+	
+	int Signal_Syscall(unsigned int CVIndex, unsigned int lockIndex) {
+
+	}
+	
+	int Broadcast_Syscall(unsigned int CVIndex, unsigned int lockIndex) {
+
+	}
+	
+	int DestroyCV_Syscall(unsigned int CVIndex) {
+
+	}
+	
+	
+-----------------
+V. Testing: 
+-----------------
+
+	+ For Part 1 and Part 2
+	
+	  The needs to enter " nachos -P ../test/proj3testcases " or 
+	  " nachos -PFIFO ../test/proj3testcases "  to run FIFO page replacement scheme. 
+	  To run the random page replacement scheme use the following command line
+	  " nachos -PRAND ../test/proj3testcases ".
+
+	  When either of the commands is entered by the user the following options get
+	  printed on the console.
+
+	--------------------------------------------------------------
+
+                 PROJECT 3            GROUP - 58
+
+                 Virtual Memory and Basic Networking
+                 >>>>>>>> TEST CASES PART 1 & 2 <<<<<<<<
+
+	--------------------------------------------------------------
+
+	 1 > Single Exec MatMult
+	 2 > Two Exec MatMult
+	 3 > Single Exec Sort
+	 4 > Two Exec Sort
+	 5 > Two Fork MatMult
+	 6 > Two Fork Sort
+
+
+	Enter the index of the testcase you want to run here ->
+
+
+	-----------------
+	Test Case 1
+	-----------------
+
+	+ How to test
+
+		Enter " nachos -P ../test/proj3testcases " or enter " nachos -PRAND ../test/proj3testcases "
+		or enter " nachos -PFIFO ../test/proj3testcases "
+		You will be able to view the output which is presented above.
+
+
+	+ Test Output
+
+		Result = 7220
+		Machine halting!
+
+		Ticks: total 1342922, idle 0, system 639760, user 703162
+		Disk I/O: reads 0, writes 0
+		Console I/O: reads 0, writes 0
+		Paging: faults 0
+		Network I/O: packets received 0, sent 0
+
+		Single Exec of Matmult runs and the result generated is 7220.
+
+	-----------------
+	Test Case 2
+	-----------------
+
+	+ How to test
+
+		Enter " nachos -P ../test/proj3testcases " or enter " nachos -PRAND ../test/proj3testcases "
+		or enter " nachos -PFIFO ../test/proj3testcases "
+		You will be able to view the output which is presented above.
+
+
+	+ Test Output
+
+		Result = 7220
+		Result = 7220
+		Machine halting!
+
+		Ticks: total 1342922, idle 0, system 639760, user 703162
+		Disk I/O: reads 0, writes 0
+		Console I/O: reads 0, writes 0
+		Paging: faults 0
+		Network I/O: packets received 0, sent 0
+
+		Two Execs of Matmult runs and the result generated is 7220 for both Execs.
+
+	-----------------
+	Test Case 3
+	-----------------
+
+
+	+ How to test
+
+		Enter " nachos -P ../test/proj3testcases " or enter " nachos -PRAND ../test/proj3testcases "
+		or enter " nachos -PFIFO ../test/proj3testcases "
+		You will be able to view the output which is presented above.
+		
+	
+	+ Test Output
+
+		Result = 1023
+
+		Machine halting!
+
+		Ticks: total 1342922, idle 0, system 639760, user 703162
+		Disk I/O: reads 0, writes 0
+		Console I/O: reads 0, writes 0
+		Paging: faults 0
+		Network I/O: packets received 0, sent 0
+		
+		Single Exec of Sort runs and the result generated is 1023.
+
+	-----------------
+	Test Case 4
+	-----------------
+
+
+	+ How to test
+
+		Enter " nachos -P ../test/proj3testcases " or enter " nachos -PRAND ../test/proj3testcases "
+		or enter " nachos -PFIFO ../test/proj3testcases "
+		You will be able to view the output which is presented above.
+		
+
+	+ Test Output
+		
+		Result = 1023
+		Result = 1023
+		Machine halting!
+
+		Ticks: total 1342922, idle 0, system 639760, user 703162
+		Disk I/O: reads 0, writes 0
+		Console I/O: reads 0, writes 0
+		Paging: faults 0
+		Network I/O: packets received 0, sent 0
+		
+		Two Execs of Sort runs and the result generated is 1023 for both Execs.
+	
+	-----------------
+	Test Case 5
+	-----------------
+
+
+	+ How to test
+
+		Enter " nachos -P ../test/proj3testcases " or enter " nachos -PRAND ../test/proj3testcases "
+		or enter " nachos -PFIFO ../test/proj3testcases "
+		You will be able to view the output which is presented above.
+	
+	
+	+ Test Output
+
+		Result (Fork 1) = 7220
+		Result (Fork 2) = 7220
+
+		Machine halting!
+
+		Ticks: total 1342922, idle 0, system 639760, user 703162
+		Disk I/O: reads 0, writes 0
+		Console I/O: reads 0, writes 0
+		Paging: faults 0
+		Network I/O: packets received 0, sent 0
+
+		Two Forks of Matmult runs and the result generated is 7220 for both Forks.
+
+	-----------------
+	Test Case 6
+	-----------------
+
+
+	+ How to test
+
+		Enter " nachos -P ../test/proj3testcases " or enter " nachos -PRAND ../test/proj3testcases "
+		or enter " nachos -PFIFO ../test/proj3testcases "
+		You will be able to view the output which is presented above.
+
+	+ Test Output
+
+		Result (Fork 1) = 1023
+		Result (Fork 2) = 1023
+
+		Machine halting!
+
+		Ticks: total 1342922, idle 0, system 639760, user 703162
+		Disk I/O: reads 0, writes 0
+		Console I/O: reads 0, writes 0
+		Paging: faults 0
+		Network I/O: packets received 0, sent 0
+
+		Two Forks of Sort runs and the result generated is 1023 for both Forks.
+
+
+	
+	+ Part3:
+		   When the user executes the following command "nachos -m 1 -o 0 -x ../test/rpctest" 
+		   the following menu will be displayed.
+
+	--------------------------------------------------------------
+				     PROJECT 3		  GROUP - 58
+			     Virtual Memory and Basic Networking
+			      >>>>>>>> TEST CASES PART 1 & 2 <<<<<<<<
+	-------------------------------------------------------------
+	
+		 1 > Create Lock RPC Test
+		 2 > Acquire Lock RPC Test
+		 3 > Release Lock RPC Test
+		 4 > Destroy Lock RPC Test
+		 5 > Create CV RPC Test
+		 6 > Wait-Signal RPC Test
+		 7 > Broadcast RPC Test
+		 8 > Destroy CV RPC Test
+		 9 > Create Monitor Variable RPC Test
+		 10 > Get Monitor Variable RPC Test
+		 11 > Set Monitor Variable RPC Test
+		 12 > Destroy Monitor Variable RPC Test
+
+	Enter the index of the testcase you want to run here ->
+    Each number indicate a sepcific test
+	
+	-----------------
+	Create Lock RPC Test
+	-----------------
+	+ How to test
+		
+		Open two nachos windows, and choose one as server another as the client. In the server
+		side under the networking directory, use command nachos -SERVER -m 0 to run server instance.
+		In the client which we should input command nachos -m 1 -o 0 -x ../test/rpctest. Then the 
+		user has to enter "1" to test for creating a Lock RPC. This tests for create lock RPC, has 4
+		different parts as follows:
+		1. Create lock with valid parameters
+		2. Create lock with invalid length
+		3. Create lock with same name
+		4. Create with no name
+	
+	+ Details for this test
+		
+		For this test we call the Create lock RPC 4 times. Each we give a different input parameter
+		and test the reply message by the server. So for the first call we pass the correct lockname
+		like newLock and have the right length value. The client side should get the right
+		return value 0 for the lock index. Second time we give a invalid length for create and client
+		should receive a failure message. Third time we try to create the same lock name which is already
+		created by the first case and exist in the server database. The client also should get a index for
+		the lock index. The last case is we try to create a lock with no name which has invalid virtual 
+		address and also shouldn't receive the index value in client side.
+		
+	
+	+ Test output
+	
+		+ In the server side:
+			
+			ServerHeart : Got "1 newLock" from 1, box 1
+			CreateLockRPC : reply message is -> 0
+			ServerHeart : Got "1 newLock" from 1, box 1
+			CreateLockRPC : Lock already exists with the same name newLock
+			CreateLockRPC : reply message is -> 0 : Lock already exists
+			ServerHeart : Got "1 " from 1, box 1
+			ServerHeart : Lock Name not sent to the Server
+		
+		+In client side:
+			
+			-----------------------------------------------------------------
+							CREATE LOCK RPC TEST CASE
+			-----------------------------------------------------------------
+
+					TEST1           CREATE LOCK WITH VALID PARAMETERS
+			CreateLock_Syscall : Client sending the Create Lock request to the server
+			CreateLock_Syscall : Lock Index received from server is 0
+			CreateLock_RPC_test : Lock Created with Index 0
+			-----------------------------------------------------------------
+
+					TEST2           CREATE LOCK WITH INVALID LENGTH
+			CreateLock_Syscall : Invalid Virtual address length
+			CreateLock_RPC_test : Lock was not Created
+			-----------------------------------------------------------------
+
+					TEST3           CREATE LOCK WITH THE SAME NAME
+			CreateLock_Syscall : Client sending the Create Lock request to the server
+			CreateLock_Syscall : Lock Index received from server is 0
+			CreateLock_RPC_test : Lock Created with Index 0
+			-----------------------------------------------------------------
+
+					TEST4           CREATE LOCK WITH NO NAME
+			CreateLock_Syscall : Client sending the Create Lock request to the server
+			CreateLock_Syscall : FAILURE : Lock Name is NULL
+			CreateLock_RPC_test : Lock was not Created
+
+		
+		
+		
+	-----------------
+	Acquire Lock RPC Test
+	-----------------
+	+ How to test
+		
+		Open two nachos windows, and choose one as server another as the client. In the server side
+		under the networking directory, use command	nachos -SERVER -m 0 to run server instance. In
+		the client which we should input command nachos -m 1 -o 0 -x ../test/rpctest. Then the user has to 
+		enter "2" to test for Acquire a Lock RPC. This tests for Acquire lock RPC, has 4 different
+		parts as follows:
+		1. Acquire lock with valid parameter after create the lock
+		2. Acquire lock with invalid parameter after create the lock
+		3. Acquire lock which is already acquired by same client after create the lock
+		4. Make a child thread acquire a lock which is acquired by parent thread after create the lock
+
+	+ Details for this test
+		
+		In this test case we must create a lock for the client to acquire it. So in the initial
+		step we use the Create lock RPC to get an index value for the lock and assume the client
+		already know which index value to acquire. For the first step we Acquire lock normally
+		and use the correct parameter 0 which is what we just created. We can see through the 
+		reply message to know whether it is successful or not. And in this case it should success
+		hence get the index value of the lock which we call acquire. The second case should be failure
+		because	it use the invalid index value. As the third one we call the Acquire lock RPC again 
+		and since the first time we call and did not release it	the server will check the condition 
+		of this lock and inform the client it is already the owner of this lock. The last one is test
+		for a lock acquired by different thread means different mailboxNumber. So we make a new thread
+		in the test case by fork a child thread in this case and let the child thread to issue a lock 
+		acquire. So the child cannot get the lock until the parent thread issue a lock release. In the 
+		result the child thread can only get the right message after the parent thread successful 
+		release the lock.
+		
+	+ Test output
+	
+		+ server side:
+		
+			ServerHeart : Got "1 AcquireTestLock" from 1, box 1
+			CreateLockRPC : reply message is -> 0
+			ServerHeart : Got "2 0" from 1, box 1
+			AcquireLockRPC : Lock 0 acquired by machine 1 from mail Box Number 1
+			ServerHeart : Got "2 3" from 1, box 1
+			ServerHeart : Got "2 0" from 1, box 1
+			ServerHeart : Got "2 0" from 1, box 2
+			AcquireLockRPC : Thread on machine 1 with mailbox number 2 is going on wait for the Lock 0
+			ServerHeart : Got "3 0" from 1, box 1
+			ReleaseLockRPC : Lock 0 released by machine 1 from mail Box Number 1
+			ReleaseLockRPC : Lock 0 acquired by machine 1 from mail Box Number 2
+
+			
+		+ client side:
+		
+			-----------------------------------------------------------------
+							ACQUIRE LOCK RPC TEST CASE
+			-----------------------------------------------------------------
+					INITIAL SETUP : CREATE A LOCK WITH VALID PARAMETERS
+			CreateLock_Syscall : Client sending the Create Lock request to the server
+			CreateLock_Syscall : Lock Index received from server is 0
+			AcquireLock_RPC_test : Lock Created with Index -1
+			-----------------------------------------------------------------
+
+					TEST1           ACQUIRE A LOCK WITH VALID LOCK INDEX
+			Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+			Acquire_Syscall : Acquired Lock Index received from server is 0
+			AcquireLock_RPC_test : Lock Acquired with Index 0
+			-----------------------------------------------------------------
+
+					TEST2           ACQUIRE A LOCK WITH INVALID LOCK INDEX
+			Acquire_Syscall : Client sending the AcquireLock 3 request to the server
+			Acquire_Syscall : FAILURE : Invalid Lock index 3
+			AcquireLock_RPC_test : Lock was not Acquired
+			-----------------------------------------------------------------
+
+					TEST3           ACQUIRE A LOCK WHICH IS ALREADY ACQUIRED BY THE SAME CLIENT
+			Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+			Acquire_Syscall : Acquired Lock Index received from server is 0
+			AcquireLock_RPC_test : Lock Acquired with Index 0
+			-----------------------------------------------------------------
+
+					TEST4           MAKE CHILD THREAD ACQUIRE A LOCK ACQUIRED BY PARENT THREAD IN TEST3
+									CHILD THREAD TRYING TO ACQUIRE A LOCK ACQUIRED BY PARENT THREAD IN TEST 3
+									PARENT THREAD RELEASING THE LOCK ACQUIRED IN TEST3
+			Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+			Release_Syscall : Client sending the Release Lock 0 request to the server
+			Release_Syscall : Server replied for release lock request
+			ReleaseLock_Syscall : Released Lock Index received from server is 0
+			AcquireLock_RPC_test : Parent Thread released the lock 0
+
+			Acquire_Syscall : Acquired Lock Index received from server is 0
+			ChildThreadAcquireLock_test : Child Acquired the Lock 0 Acquired by parent
+
+		
+	-----------------
+	Release Lock RPC Test
+	-----------------
+	
+	+ How to test
+		
+		Open two nachos windows, and choose one as server another as the client. In the
+		server side under the networking directory, use command	nachos -SERVER -m 0 to run
+		server instance. In the client which we should input command nachos -m 1 -o 0 -x ../test/rpctest.
+		Then the user has to enter "3" to test for Release a Lock RPC. This tests for Release lock RPC,
+		has 4 different parts as follows:
+		1. Release lock with valid parameter after create and acquire the same lock
+		2. Release lock with invalid parameter after create and acquire the same lock
+		3. Release lock which has not been created
+		4. Make a child thread release a lock created and acquired by current thread
+	
+	+ Details for this test
+	
+		In the release test, we must have a already created lock and several different case for the
+		lock owner. So before we release the lock we first create the lock and acquire it successful.
+		The first situation is releas the lock with valid parameter and get the right 
+		reply message. The second one is try to pass the invalid lock index value and should get 
+		failure message. Third one is trying to release a lock that has not been created by using a
+		unexisted index and this should also be failure. The last one is test when other thread wants
+		to release the lock	not owner by it. Just in this case, we create the child thread to release
+		the lock which already acquired by the parent thread. So inside the test case we 
+		call the acquire lock first then make a child thread to let it release the lock. 
+		The server should inform the child thread it is not the lock owner.
+	
+	+ Test output
+		
+		+ server side:
+			
+			ServerHeart : Got "1 ReleaseTestLock" from 1, box 1
+			CreateLockRPC : reply message is -> 0
+			ServerHeart : Got "2 0" from 1, box 1
+			AcquireLockRPC : Lock 0 acquired by machine 1 from mail Box Number 1
+			ServerHeart : Got "3 0" from 1, box 1
+			ServerHeart : Got "3 -10" from 1, box 1
+			ServerHeart : Got "3 3" from 1, box 1
+			ServerHeart : Got "2 0" from 1, box 1
+			AcquireLockRPC : Lock 0 acquired by machine 1 from mail Box Number 1
+			ServerHeart : Got "3 0" from 1, box 2
+
+		+ client side:
+			
+			-----------------------------------------------------------------
+							RELEASE LOCK RPC TEST CASE
+			-----------------------------------------------------------------
+					INITIAL SETUP : CREATE A LOCK WITH VALID PARAMETERS
+			CreateLock_Syscall : Client sending the Create Lock request to the server
+			CreateLock_Syscall : Lock Index received from server is 0
+			ReleaseLock_RPC_test : Lock Created with Index 0
+					INITIAL SETUP : ACQUIRE A LOCK WITH VALID LOCK INDEX
+			Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+			Acquire_Syscall : Acquired Lock Index received from server is 0
+			ReleaseLock_RPC_test : Lock Acquired with Index 0
+			-----------------------------------------------------------------
+
+					TEST1           RELEASE A LOCK WITH VALID LOCK INDEX
+			Release_Syscall : Client sending the Release Lock 0 request to the server
+			Release_Syscall : Server replied for release lock request
+			ReleaseLock_Syscall : Released Lock Index received from server is 0
+			ReleaseLock_RPC_test : Lock Released with Index 0
+			-----------------------------------------------------------------
+
+					TEST2           RELEASE A LOCK WITH INVALID LOCK INDEX
+			Release_Syscall : Client sending the Release Lock -10 request to the server
+			Release_Syscall : Server replied for release lock request
+			ReleaseLock_Syscall : FAILURE : Invalid Lock index -10
+			ReleaseLock_RPC_test : Lock was not Released
+			-----------------------------------------------------------------
+
+					TEST3           RELEASE A LOCK WHICH IS NOT CREATED
+			Release_Syscall : Client sending the Release Lock 3 request to the server
+			Release_Syscall : Server replied for release lock request
+			ReleaseLock_Syscall : FAILURE : Invalid Lock index 3
+			ReleaseLock_RPC_test : Lock was not Released
+			-----------------------------------------------------------------
+
+					TEST4           MAKE CHILD THREAD RELEASE A LOCK ACQUIRED BY CURRENT THREAD
+			Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+			Acquire_Syscall : Acquired Lock Index received from server is 0
+			ReleaseLock_RPC_test : Parent Acquired Lock with Index 0
+									CHILD THREAD TRYING TO RELEASE A LOCK ACQUIRED BY PARENT THREAD
+			Release_Syscall : Client sending the Release Lock 0 request to the server
+			Release_Syscall : Server replied for release lock request
+			ReleaseLock_Syscall : FAILURE : Not Lock 0 owner
+			ChildThreadReleaseLock_test : Child could not Release the Lock 0
+	
+	-----------------
+	Destroy Lock Syscall Test
+	-----------------
+			
+		+ How to test
+		
+			Open two nachos windows, and choose one as server another as the client. In the server side under
+			the networking directory, use command nachos -SERVER -m 0 to run server instance. In the client 
+			which we should input command nachos -m 1 -o 0 -x ../test/rpctest. Then the user has to 
+			enter "4" to test for Destroy Lock RPC. This tests for Destroy Lock RPC, has 6 different
+			steps as follows:
+			1. Make machine 1 Create a lock
+			2. Make machine 2 Create the same Lock 
+			3. Make machine 1 Acquire the Lock Created in STEP 1
+			4. Make machine 1 Destroy the Lock 
+			5. Make machine 2 also to Destroy the Lock 
+			6. Make machine 1 Release the Lock to actually Destroy the Lock from server memory
+		
+		+ Details for this test
+			
+			When we destroy lock we just decrease its destroy counter since the lock is shared among the clients.
+			To test it we first create it two times and make the client acquire it means it is already in use. Then
+			we use a valid index to destroy it. Although it is in using we can successfully decrease the destroy counter.
+			Then Sencond we destroy this lock again. By this time  the destroy counter is go down to 0 and it will destroy 
+			successfully. So the 4th and 5th step is to destroy the lock 2 times. Then in step 6 issue a release lock to 
+			destroy it fully in the last step.
+			
+		+ Test output
+		
+			+ server side:
+							
+				ServerHeart : Got "1 DestroyTestLock" from 1, box 0
+				CreateLockRPC : reply message is -> 0
+				ServerHeart : Got "1 DestroyTestLock" from 2, box 0
+				CreateLockRPC : Lock already exists with the same name DestroyTestLock
+				CreateLockRPC : reply message is -> 0 : Lock already exists
+				ServerHeart : Got "2 0" from 1, box 0
+				AcquireLockRPC : Lock 0 acquired by machine 1 from mail Box Number 0
+				ServerHeart : Got "4 0" from 1, box 0
+				ServerHeart : Got "4 0" from 2, box 0
+				ServerHeart : Got "3 0" from 1, box 0
+				ReleaseLockRPC : Lock 0 is Destroyed in release syscall
+
+			+ client 1 side:
+
+				-----------------------------------------------------------------
+								DESTROY LOCK RPC TEST CASE - STEP 1
+				-----------------------------------------------------------------
+
+				-----------------------------------------------------------------
+						INITIAL SETUP : CREATE A LOCK WITH VALID PARAMETERS
+				CreateLock_Syscall : Client sending the Create Lock request to the server
+				CreateLock_Syscall : Lock Index received from server is 0
+				CreateLock_Syscall : Msg fron Server : 0
+				Destroy_W1_Create : Lock Created with Index 0
+				Machine halting!
+			
+				-----------------------------------------------------------------
+								DESTROY LOCK RPC TEST CASE - STEP 3
+				-----------------------------------------------------------------
+
+				-----------------------------------------------------------------
+						INITIAL SETUP : ACQUIRE A LOCK WITH VALID LOCK INDEX
+				Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+				Acquire_Syscall : Acquired Lock Index received from server is 0
+				Acquire_Syscall : Msg fron Server : 0 : Lock 0 is Acquired
+				DestroyLock_RPC_test : Lock Acquired with Index 0
+				Machine halting!
+
+				-----------------------------------------------------------------
+								DESTROY LOCK RPC TEST CASE - STEP 4
+				-----------------------------------------------------------------
+
+				-----------------------------------------------------------------
+						TEST1 : DESTROY A LOCK WITH VALID LOCK INDEX
+				DestroyLock_Syscall : Client sending the Destroy Lock 0 request to the server
+				DestroyLock_Syscall : Server replied after destroy Lock request
+				DestroyLock_Syscall : Destroyed Lock Index received from server is 0
+				DestroyLock_Syscall : Msg fron Server : 0 : Lock 0 is going to be Destroyed
+				DestroyLock_RPC_test : Lock Destroyed with Index 0
+				Machine halting!
+				
+				-----------------------------------------------------------------
+								DESTROY LOCK RPC TEST CASE - STEP 6
+				-----------------------------------------------------------------
+
+				-----------------------------------------------------------------
+
+						TEST3           RELEASE A LOCK WITH VALID LOCK INDEX
+				Release_Syscall : Client sending the Release Lock 0 request to the server
+				Release_Syscall : Server replied for release lock request
+				ReleaseLock_Syscall : Released Lock Index received from server is 0
+				ReleaseLock_Syscall : Msg fron Server : 0 : Lock 0 is Released
+				DestroyLock_RPC_test : Lock Released with Index 0
+				Machine halting!
+			
+			+ client 2 side:
+	
+				-----------------------------------------------------------------
+								DESTROY LOCK RPC TEST CASE - STEP 2
+				-----------------------------------------------------------------
+
+				-----------------------------------------------------------------
+						INITIAL SETUP : CREATE A LOCK WITH VALID PARAMETERS
+				CreateLock_Syscall : Client sending the Create Lock request to the server
+				CreateLock_Syscall : Lock Index received from server is 0
+				CreateLock_Syscall : Msg fron Server : 0 : Lock already exists
+				Destroy_W2_Create : Lock Created with Index 0
+				Machine halting!
+
+				-----------------------------------------------------------------
+								DESTROY LOCK RPC TEST CASE - STEP 5
+				-----------------------------------------------------------------
+
+				-----------------------------------------------------------------
+						TEST1 : DESTROY A LOCK WITH VALID LOCK INDEX
+				DestroyLock_Syscall : Client sending the Destroy Lock 0 request to the server
+				DestroyLock_Syscall : Server replied after destroy Lock request
+				DestroyLock_Syscall : Destroyed Lock Index received from server is 0
+				DestroyLock_Syscall : Msg fron Server : 0 : Lock 0 is going to be Destroyed
+				DestroyLock_RPC_test : Lock Destroyed with Index 0
+				Machine halting!
+
+				
+	-----------------
+	Create CV RPC Test
+	-----------------
+	
+	+ How to test
+		
+		Open two nachos windows, and choose one as server another as the client. In the server side under the 
+		networking directory, use command nachos -SERVER -m 0 to run server instance. In the client which we 
+		should input command nachos -m 1 -o 0 -x ../test/rpctest. Then the user has to 
+		enter "5" to test for Create a Condition RPC. This tests for Create condition RPC, has 4 
+		different parts as follows:
+		1. Create CV with valid parameters
+		2. Create CV with invalid length
+		3. Create CV with same name
+		4. Create CV with no name
+	
+	+ Details for this test
+	
+		Create Conditionvariable RPC test is similar with the the Create lock RPC test. In these 4 
+		situation, we pass the valid parameter and receive the index for this condition. And in the rest
+		failure cases like second and fourth one we give the invalid length or create with 
+		no name which represent create without right virtual address. The third case is to create the 
+		same condition again and we should get the correct index number instead of failure message.
+		
+	+ Test output
+	
+		+ server side:
+		
+			ServerHeart : Got "5 newCV" from 1, box 1
+			CV name requested newCV
+			cvsDBIndex is -1
+			CreateCVRPC : reply message is -> 0
+			ServerHeart : Got "5 newCV" from 1, box 1
+			CV name requested newCV
+			cvsDBIndex is 0
+			CreateCVRPC : CV already exists with the same name newCV
+			CreateCVRPC : reply message is -> 0 : CV already exists
+			ServerHeart : Got "5 " from 1, box 1
+			ServerHeart : CV Name not sent to the Server
+
+		
+		+ client side:
+		
+			-----------------------------------------------------------------
+							CREATE CV RPC TEST CASE
+			-----------------------------------------------------------------
+
+					TEST1           CREATE CV WITH VALID PARAMETERS
+			CreateCV_Syscall : Client sending the message to the server
+			CreateCV_Syscall : CV Index received from server is 0
+			CreateCV_RPC_test : CV Created with Index 0
+			-----------------------------------------------------------------
+
+					TEST2           CREATE CV WITH INVALID LENGTH
+			CreateCV_Syscall:Invalid Virtual address length
+			CreateCV_RPC_test : CV was not Created
+			-----------------------------------------------------------------
+
+					TEST3           CREATE CV WITH THE SAME NAME
+			CreateCV_Syscall : Client sending the message to the server
+			CreateCV_Syscall : CV Index received from server is 0
+			CreateCV_RPC_test : CV Created with Index 0
+			-----------------------------------------------------------------
+
+					TEST4           CREATE CV WITH NO NAME
+			CreateCV_Syscall : Client sending the message to the server
+			CreateCV_Syscall : FAILURE : CV Name is NULL
+			CreateCV_RPC_test : CV was not Created
+
+	-------------------
+	Wait-Signal RPC Test
+	--------------------
+
+	+ For single client test 
+		
+		+ How to test
+		
+			Open two nachos windows, and choose one as server another as the client. In the server side
+			under the networking directory, use command	nachos -SERVER -m 0 to run server instance. In the
+			client which we should input command nachos -m 1 -o 0 -x ../test/rpctest. Then the user has to 
+			enter "6" to test for Condition wait-signal RPC. For this single client test you should continue
+			to choose which RPC you want to choose, "1" for signal or "2" for wait. All of them test for serval
+			situations as follows:
+			1. Condition waiting with invalid lock index after create the condition and lock
+			2. Condition waiting with invalid condition index after create the condition and lock
+			3. Condition waiting with lock not owned by this thread after create the condition and lock
+			4. Signal with an invalid CV index
+			5. Signal with an invalid lock index which mismatch the CV lock
+			
+		+ Details for this test
+			
+			These varification test is similar to the lock acquire or release RPC. But as the input argument
+			contain not only CV index but also lock index so we need to make test cases for both of them like
+			the first, second one. Another check is also needed that is we need to check whether this lock
+			is owned by this client. Any of these situation happens we should receive a failure message.
+		
+		+ Test output
+		
+			The ouput is combined within the multiple clients sychronization test.
+	
+	+ For multiple clients sychronization test
+
+		+ How to test
+		
+			Open four nachos windows, and choose one as server another as the client. Choose another two as
+			waiting clients. The last one is signaler. In the server side under the networking directory,
+			use command nachos -SERVER -m 0 to run server instance. In the client which we should input 
+			command nachos -m 1/2 -o 0 -x ../test/rpctest	three times and notice each time we use a different
+			machine number. Then the first and second nachos window should run the Wait-signal RPC Test by 
+			entering "6" and choose "1" which make them wait in an created condition variable. The other client
+			should also run the testfile input command nachos -m 3 -o 0 -x ../test/rpctest. As a signal instance
+			it should run the signal PRC by choosing "6" and then choosing "2". Then it will signal a nachos instance
+			to let it wake up and receive message. Then we can run it again by using same command and choose the same
+			number. After second time signaling, the second waiting client is also waking up from the waiting status.
+		
+		+ Details for this test
+		
+			Like other RPC test, we also need initial setup for Condition wait and signal. We first create
+			the related conditionvariable and the lock for it. Then acquire the lock before going to wait. 
+			The same procedure also goes on the signal one just for single client test need. And if the lock and
+			CV can be shared so there would not have problem if we create the same CV or lock multiple times. 
+			Then when the first client goes on waiting, it release the lock and get by the second client which is also used
+			for waiting. Then his released lock pass to the third one and the last client use this lock to signal
+			one client that send him a message. And if we mske it signal again it will again acquire the lock and 
+			wake up the second waiting client. And since when signal for a client the signaler help the waiting client
+			issue a lock acquire, so after	the waiting client come out of the waiting it already own the lock and 
+			should release it for the signaler client to signal second time.
+			
+		+ Test output
+
+			+ server side:
+			
+				ServerHeart : Got "5 waitCV" from 1, box 1
+				CV name requested waitCV
+				cvsDBIndex is -1
+				CreateCVRPC : reply message is -> 0
+				ServerHeart : Got "1 waitLock" from 1, box 1
+				CreateLockRPC : reply message is -> 0
+				ServerHeart : Got "2 0" from 1, box 1
+				AcquireLockRPC : Lock 0 acquired by machine 1 from mail Box Number 1
+				ServerHeart : Got "6 0 -10" from 1, box 1
+				ServerHeart : Got "6 -10 0" from 1, box 1
+				ServerHeart : Got "6 0 4" from 1, box 1
+				ServerHeart : Got "6 0 0" from 1, box 1
+				CVWaitRPC : Lock 0 is made FREE by machine 1 mail Box No.1 since no waiters for lock
+				CVWaitRPC : Machine 1 from mail box number 1 going on WAIT in CV 0 and Lock 0
+				ServerHeart : Got "5 waitCV" from 2, box 1
+				CV name requested waitCV
+				cvsDBIndex is 0
+				CreateCVRPC : CV already exists with the same name waitCV
+				CreateCVRPC : reply message is -> 0 : CV already exists
+				ServerHeart : Got "1 waitLock" from 2, box 1
+				CreateLockRPC : Lock already exists with the same name waitLock
+				CreateLockRPC : reply message is -> 0 : Lock already exists
+				ServerHeart : Got "2 0" from 2, box 1
+				AcquireLockRPC : Lock 0 acquired by machine 2 from mail Box Number 1
+				ServerHeart : Got "6 0 -10" from 2, box 1
+				ServerHeart : Got "6 -10 0" from 2, box 1
+				ServerHeart : Got "6 0 4" from 2, box 1
+				ServerHeart : Got "6 0 0" from 2, box 1
+				CVWaitRPC : Lock 0 is made FREE by machine 2 mail Box No.1 since no waiters for lock
+				CVWaitRPC : Machine 2 from mail box number 1 going on WAIT in CV 0 and Lock 0
+				ServerHeart : Got "1 waitLock" from 3, box 1
+				CreateLockRPC : Lock already exists with the same name waitLock
+				CreateLockRPC : reply message is -> 0 : Lock already exists
+				ServerHeart : Got "5 waitCV" from 3, box 1
+				CV name requested waitCV
+				cvsDBIndex is 0
+				CreateCVRPC : CV already exists with the same name waitCV
+				CreateCVRPC : reply message is -> 0 : CV already exists
+				ServerHeart : Got "2 0" from 3, box 1
+				AcquireLockRPC : Lock 0 acquired by machine 3 from mail Box Number 1
+				ServerHeart : Got "7 0 0" from 3, box 1
+				ServerHeart : Got "3 0" from 3, box 1
+				ReleaseLockRPC : Lock 0 released by machine 3 from mail Box Number 1
+				ReleaseLockRPC : Lock 0 acquired by machine 1 from mail Box Number 1
+				ServerHeart : Got "3 0" from 1, box 1
+				ServerHeart : Got "1 waitLock" from 3, box 1
+				CreateLockRPC : Lock already exists with the same name waitLock
+				CreateLockRPC : reply message is -> 0 : Lock already exists
+				ServerHeart : Got "5 waitCV" from 3, box 1
+				CV name requested waitCV
+				cvsDBIndex is 0
+				CreateCVRPC : CV already exists with the same name waitCV
+				CreateCVRPC : reply message is -> 0 : CV already exists
+				ServerHeart : Got "2 0" from 3, box 1
+				AcquireLockRPC : Lock 0 acquired by machine 3 from mail Box Number 1
+				ServerHeart : Got "7 0 0" from 3, box 1
+				ServerHeart : Got "3 0" from 3, box 1
+				ReleaseLockRPC : Lock 0 released by machine 3 from mail Box Number 1
+				ReleaseLockRPC : Lock 0 acquired by machine 2 from mail Box Number 1
+				ServerHeart : Got "3 0" from 2, box 1
+
+			+ waiting client 1 side:
+			
+				-----------------------------------------------------------------
+								WAIT CV RPC TEST CASE
+				-----------------------------------------------------------------
+
+						INITIAL SETUP : CREATE CV FOR CONDITION WAITING
+				CreateCV_Syscall : Client sending the message to the server
+				CreateCV_Syscall : CV Index received from server is 0
+				WaitCV_RPC_test : CV Created with Index 0 for condition waiting
+				-----------------------------------------------------------------
+
+						INITIAL SETUP : CREATE LOCK FOR CONDITION WAITING
+				CreateLock_Syscall : Client sending the Create Lock request to the server
+				CreateLock_Syscall : Lock Index received from server is 0
+				WaitCV_RPC_test : Lock Created with Index 0 for condition waiting
+				-----------------------------------------------------------------
+
+						INITIAL SETUP : ACQUIRE A LOCK FOR CONDITION WAITING
+				Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+				Acquire_Syscall : Acquired Lock Index received from server is 0
+				WaitCV_RPC_test : Lock Acquired with Index 0 for condition waiting
+				-----------------------------------------------------------------
+
+						TEST1           CONDITION WAITING WITH INVALID LOCK INDEX
+				Wait_Syscall : Client sending the wait request to the server
+				Wait_Syscall : Server replied after the CV 0 wait request
+				Wait_Syscall : FAILURE : Invalid Lock index -10
+
+				WaitCV_RPC_test : Wait unsuccessful
+				-----------------------------------------------------------------
+
+						TEST2           CONDITION WAITING WITH INVALID CV INDEX
+				Wait_Syscall : Client sending the wait request to the server
+				Wait_Syscall : Server replied after the CV -10 wait request
+				Wait_Syscall : FAILURE : Invalid CV index -10
+
+				WaitCV_RPC_test : Wait unsuccessful
+				-----------------------------------------------------------------
+
+						TEST3           CONDITION WAITING WITH A LOCK NOT OWNED BY THIS THREAD
+				Wait_Syscall : Client sending the wait request to the server
+				Wait_Syscall : Server replied after the CV 0 wait request
+				Wait_Syscall : FAILURE : Invalid Lock index 4
+
+				WaitCV_RPC_test : Wait unsuccessful
+				-----------------------------------------------------------------
+
+						TEST4           CONDITION WAITING WITH VALID LOCK AND CV
+				NOTE TO GRADER: Since the current machine has been put into wait
+								you can see the server has not replied to the client.
+
+								To make the current machine come out of wait, you need to open another
+								Window with a different instance of Nachos running on it. Once you see
+								the TEST CASES MENU, please select the Signal RPC test case in it.
+
+				Wait_Syscall : Client sending the wait request to the server
+				Wait_Syscall : Server replied after the CV 0 wait request
+				Wait_Syscall : CV index received from server is 0
+				WaitCV_RPC_test : Thread is back from wait on CV 0
+				-----------------------------------------------------------------
+
+						RELEASE A LOCK AFTER COMING OUT OF WAIT
+				Release_Syscall : Client sending the Release Lock 0 request to the server
+				Release_Syscall : Server replied for release lock request
+				ReleaseLock_Syscall : Released Lock Index received from server is 0
+				WaitCV_RPC_test : Release the Lock 0 after coming out of wait
+	
+			+ waiting client 2 side:
+				-----------------------------------------------------------------
+								WAIT CV RPC TEST CASE
+				-----------------------------------------------------------------
+
+						INITIAL SETUP : CREATE CV FOR CONDITION WAITING
+				CreateCV_Syscall : Client sending the message to the server
+				CreateCV_Syscall : CV Index received from server is 0
+				WaitCV_RPC_test : CV Created with Index 0 for condition waiting
+				-----------------------------------------------------------------
+
+						INITIAL SETUP : CREATE LOCK FOR CONDITION WAITING
+				CreateLock_Syscall : Client sending the Create Lock request to the server
+				CreateLock_Syscall : Lock Index received from server is 0
+				WaitCV_RPC_test : Lock Created with Index 0 for condition waiting
+				-----------------------------------------------------------------
+
+						INITIAL SETUP : ACQUIRE A LOCK FOR CONDITION WAITING
+				Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+				Acquire_Syscall : Acquired Lock Index received from server is 0
+				WaitCV_RPC_test : Lock Acquired with Index 0 for condition waiting
+				-----------------------------------------------------------------
+
+						TEST1           CONDITION WAITING WITH INVALID LOCK INDEX
+				Wait_Syscall : Client sending the wait request to the server
+				Wait_Syscall : Server replied after the CV 0 wait request
+				Wait_Syscall : FAILURE : Invalid Lock index -10
+
+				WaitCV_RPC_test : Wait unsuccessful
+				-----------------------------------------------------------------
+
+						TEST2           CONDITION WAITING WITH INVALID CV INDEX
+				Wait_Syscall : Client sending the wait request to the server
+				Wait_Syscall : Server replied after the CV -10 wait request
+				Wait_Syscall : FAILURE : Invalid CV index -10
+
+				WaitCV_RPC_test : Wait unsuccessful
+				-----------------------------------------------------------------
+
+						TEST3           CONDITION WAITING WITH A LOCK NOT OWNED BY THIS THREAD
+				Wait_Syscall : Client sending the wait request to the server
+				Wait_Syscall : Server replied after the CV 0 wait request
+				Wait_Syscall : FAILURE : Invalid Lock index 4
+
+				WaitCV_RPC_test : Wait unsuccessful
+				-----------------------------------------------------------------
+
+						TEST4           CONDITION WAITING WITH VALID LOCK AND CV
+				NOTE TO GRADER: Since the current machine has been put into wait
+								you can see the server has not replied to the client.
+
+								To make the current machine come out of wait, you need to open a                                                                                        nother
+								Window with a different instance of Nachos running on it. Once y                                                                                        ou see
+								the TEST CASES MENU, please select the Signal RPC test case in i                                                                                        t.
+
+				Wait_Syscall : Client sending the wait request to the server
+				Wait_Syscall : Server replied after the CV 0 wait request
+				Wait_Syscall : CV index received from server is 0
+				WaitCV_RPC_test : Thread is back from wait on CV 0
+				-----------------------------------------------------------------
+
+						RELEASE A LOCK AFTER COMING OUT OF WAIT
+				Release_Syscall : Client sending the Release Lock 0 request to the server
+				Release_Syscall : Server replied for release lock request
+				ReleaseLock_Syscall : Released Lock Index received from server is 0
+				WaitCV_RPC_test : Release the Lock 0 after coming out of wait
+
+			
+			+ signal client side:
+			
+				-----------------------------------------------------------------
+
+						INITIAL SETUP : CREATE LOCK FOR SIGNALLING A WAITER
+				CreateLock_Syscall : Client sending the Create Lock request to the server
+				CreateLock_Syscall : Lock Index received from server is 0
+				SignalCV_RPC_test : Lock Created with Index 0 for signalling a waiter
+
+						INITIAL SETUP : CREATE CV FOR SIGNALLING A WAITER
+				CreateCV_Syscall : Client sending the message to the server
+				CreateCV_Syscall : CV Index received from server is 0
+				SignalCV_RPC_test : CV Created with Index 0 for signalling a waiter
+				-----------------------------------------------------------------
+
+						INITIAL SETUP : ACQUIRE A LOCK FOR SIGNALLING A WAITER
+				Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+				Acquire_Syscall : Acquired Lock Index received from server is 0
+				SignalCV_RPC_test : Lock 0 Acquired for signalling a waiter
+				-----------------------------------------------------------------
+
+						TEST1           SIGNALLING A WAITER WITH AN INVALID CV INDEX
+				Signal_Syscall : Client sending the message to the server
+				Signal_Syscall : Server replied after releasing the Lock
+				Signal_Syscall : FAILURE : Invalid CV index 0
+				SignalCV_RPC_test : Could not Signal a waiter waiting on CV 10 using the Lock 0
+				-----------------------------------------------------------------
+
+						INITIAL TEST 2 SETUP : CREATE LOCK FOR SIGNALLING A WAITER WITH A DIFFERENT LOCK
+				CreateLock_Syscall : Client sending the Create Lock request to the server
+				CreateLock_Syscall : Lock Index received from server is 1
+				SignalCV_RPC_test : Lock Created with Index 1 for signalling a waiter with a different Lo
+						INITIAL TEST 2 SETUP : ACQUIRE A LOCK FOR SIGNALLING A WAITER WITH A DIFFERENT LOCK
+				Acquire_Syscall : Client sending the AcquireLock 1 request to the server
+				Acquire_Syscall : Acquired Lock Index received from server is 1
+				SignalCV_RPC_test : Lock 1 Acquired for signalling a waiter with a different Lock to crea
+						TEST2           SIGNALLING A WAITER WITH AN INVALID LOCK INDEX TO MISMATCH THE CV LOCK
+				Signal_Syscall : Client sending the message to the server
+				Signal_Syscall : Server replied after releasing the Lock
+				Signal_Syscall : FAILURE : CVlock 0 mismatch with Lock 1
+				SignalCV_RPC_test : Could not Signal a waiter waiting on CV 0 using the Lock 1
+
+						RELEASE A LOCK AFTER SIGNALLING A WAITER WITH A DIFFERENT LOCK
+				Release_Syscall : Client sending the Release Lock 1 request to the server
+				Release_Syscall : Server replied for release lock request
+				ReleaseLock_Syscall : Released Lock Index received from server is 1
+				SignalCV_RPC_test : Release the Lock 1 after signalling a waiter
+				-----------------------------------------------------------------
+
+						TEST3           SIGNALLING A WAITER WAITING ON CV WITH VALID LOCK
+				Signal_Syscall : Client sending the message to the server
+				Signal_Syscall : Server replied after releasing the Lock
+				Signal_Syscall : CV index received from server is 0
+				SignalCV_RPC_test : Signalled a waiter(if any) waiting on CV 0 using the Lock
+				-----------------------------------------------------------------
+
+						RELEASE A LOCK AFTER SIGNALLING A WAITER
+				Release_Syscall : Client sending the Release Lock 0 request to the server
+				Release_Syscall : Server replied for release lock request
+				ReleaseLock_Syscall : Released Lock Index received from server is 0
+				SignalCV_RPC_test : Release the Lock 0 after signalling a waiter
+				-----------------------------------------------------------------
+
+				NOTE TO GRADER : (If any waiters were there in the CV wait queue) Now you can see
+								the machine which was waiting on the CV on the other window is back
+
+												--------------------------------------------------------------
+
+															 PROJECT 3            GROUP - 58
+
+															 Virtual Memory and Basic Networking
+															  >>>>>>>> TEST CASES <<<<<<<<
+
+												--------------------------------------------------------------
+				 1 > Create Lock RPC Test
+				 2 > Acquire Lock RPC Test
+				 3 > Release Lock RPC Test
+				 4 > Destroy Lock RPC Test
+				 5 > Create CV RPC Test
+				 6 > Wait-Signal RPC Test
+				 7 > Broadcast RPC Test
+				 8 > Destroy CV RPC Test
+				Enter the index of the testcase you want to run here ->6
+						STEP 1 > Make this machine go on WAIT
+						STEP 2 > Make this machine SIGNAL the waiting machine
+				Enter the STEP no. you want to run here ->2
+				-----------------------------------------------------------------
+						INITIAL SETUP : CREATE LOCK FOR SIGNALLING A WAITER
+				CreateLock_Syscall : Client sending the Create Lock request to the server
+				CreateLock_Syscall : Lock Index received from server is 0
+				SignalCV_RPC_test : Lock Created with Index 0 for signalling a waiter
+
+						INITIAL SETUP : CREATE CV FOR SIGNALLING A WAITER
+				CreateCV_Syscall : Client sending the message to the server
+				CreateCV_Syscall : CV Index received from server is 0
+				SignalCV_RPC_test : CV Created with Index 0 for signalling a waiter
+				-----------------------------------------------------------------
+
+						INITIAL SETUP : ACQUIRE A LOCK FOR SIGNALLING A WAITER
+				Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+				Acquire_Syscall : Acquired Lock Index received from server is 0
+				SignalCV_RPC_test : Lock 0 Acquired for signalling a waiter
+				-----------------------------------------------------------------
+
+						TEST1           SIGNALLING A WAITER WITH AN INVALID CV INDEX
+				Signal_Syscall : Client sending the message to the server
+				Signal_Syscall : Server replied after releasing the Lock
+				Signal_Syscall : FAILURE : Invalid CV index 0
+				SignalCV_RPC_test : Could not Signal a waiter waiting on CV 10 using the Lock 0
+				-----------------------------------------------------------------
+
+						INITIAL TEST 2 SETUP : CREATE LOCK FOR SIGNALLING A WAITER WITH A DIFFERENT LOCK
+				CreateLock_Syscall : Client sending the Create Lock request to the server
+				CreateLock_Syscall : Lock Index received from server is 1
+				SignalCV_RPC_test : Lock Created with Index 1 for signalling a waiter with a different Lo
+						INITIAL TEST 2 SETUP : ACQUIRE A LOCK FOR SIGNALLING A WAITER WITH A DIFFERENT LOCK
+				Acquire_Syscall : Client sending the AcquireLock 1 request to the server
+				Acquire_Syscall : Acquired Lock Index received from server is 1
+				SignalCV_RPC_test : Lock 1 Acquired for signalling a waiter with a different Lock to crea
+						TEST2           SIGNALLING A WAITER WITH AN INVALID LOCK INDEX TO MISMATCH THE CV LOCK
+				Signal_Syscall : Client sending the message to the server
+				Signal_Syscall : Server replied after releasing the Lock
+				Signal_Syscall : FAILURE : CVlock 0 mismatch with Lock 1
+				SignalCV_RPC_test : Could not Signal a waiter waiting on CV 0 using the Lock 1
+
+						RELEASE A LOCK AFTER SIGNALLING A WAITER WITH A DIFFERENT LOCK
+				Release_Syscall : Client sending the Release Lock 1 request to the server
+				Release_Syscall : Server replied for release lock request
+				ReleaseLock_Syscall : Released Lock Index received from server is 1
+				SignalCV_RPC_test : Release the Lock 1 after signalling a waiter
+				-----------------------------------------------------------------
+
+						TEST3           SIGNALLING A WAITER WAITING ON CV WITH VALID LOCK
+				Signal_Syscall : Client sending the message to the server
+				Signal_Syscall : Server replied after releasing the Lock
+				Signal_Syscall : CV index received from server is 0
+				SignalCV_RPC_test : Signalled a waiter(if any) waiting on CV 0 using the Lock
+				-----------------------------------------------------------------
+
+						RELEASE A LOCK AFTER SIGNALLING A WAITER
+				Release_Syscall : Client sending the Release Lock 0 request to the server
+				Release_Syscall : Server replied for release lock request
+				ReleaseLock_Syscall : Released Lock Index received from server is 0
+				SignalCV_RPC_test : Release the Lock 0 after signalling a waiter
+				-----------------------------------------------------------------
+
+				NOTE TO GRADER : (If any waiters were there in the CV wait queue) Now you can see
+								the machine which was waiting on the CV on the other window is back
+							
+	-----------------
+	Broadcast Syscall RPC Test
+	-----------------
+		
+		+ How to test	
+			
+			Open five nachos windows and choose one as server. The other four is consist three waiting clients 
+			and one broadcast client. The server is in the network directory and use command nachos -SERVER -m 0 to
+			run server instance. The rest of client use the command nachos -m c -o 0 -x ../test/rpctest. The letter 
+			c represent the machineID for each client. Then in the three waiting client side choose test "7", and choose
+			a step1-3 for the test. All the clients should going to wait after choose the step number.
+			Then use the last client to issue a broadcast that wake them up by choosing the step "4". Then we can 
+			see the result of the test.
+		
+		+ Detail for this test
+		
+			Similar like the CV signal RPC test. For single broadcast test we test the value pass to the
+			RPC and if it is wrong the reply the failure message. For broadcast we just open more window and use one 
+			client to wake up th others at one time. Because broadcast is call multiple CVsignal RPC so we should see 
+			all the client wake up at one time. And the return message for the broadcast caller just is one not three time.
+			
+		+ Test ouput 
+			
+			+ server side:
+			
+				ServerHeart : Got "5 waitCV" from 1, box 1
+				CreateCVRPC : reply message is -> 0
+				ServerHeart : Got "1 waitLock" from 1, box 1
+				CreateLockRPC : reply message is -> 0
+				ServerHeart : Got "2 0" from 1, box 1
+				AcquireLockRPC : Lock 0 acquired by machine 1 from mail Box Number 1
+				ServerHeart : Got "6 0 0" from 1, box 1
+				CVWaitRPC : Lock 0 is made FREE by machine 1 mail Box No.1 since no waiters for lock
+				CVWaitRPC : Machine 1 from mail box number 1 going on WAIT in CV 0 and Lock 0
+				ServerHeart : Got "5 waitCV" from 2, box 1
+				CreateCVRPC : CV already exists with the same name waitCV
+				CreateCVRPC : reply message is -> 0 : CV already exists
+				ServerHeart : Got "1 waitLock" from 2, box 1
+				CreateLockRPC : Lock already exists with the same name waitLock
+				CreateLockRPC : reply message is -> 0 : Lock already exists
+				ServerHeart : Got "2 0" from 2, box 1
+				AcquireLockRPC : Lock 0 acquired by machine 2 from mail Box Number 1
+				ServerHeart : Got "6 0 0" from 2, box 1
+				CVWaitRPC : Lock 0 is made FREE by machine 2 mail Box No.1 since no waiters for lock
+				CVWaitRPC : Machine 2 from mail box number 1 going on WAIT in CV 0 and Lock 0
+				ServerHeart : Got "5 waitCV" from 3, box 1
+				CreateCVRPC : CV already exists with the same name waitCV
+				CreateCVRPC : reply message is -> 0 : CV already exists
+				ServerHeart : Got "1 waitLock" from 3, box 1
+				CreateLockRPC : Lock already exists with the same name waitLock
+				CreateLockRPC : reply message is -> 0 : Lock already exists
+				ServerHeart : Got "2 0" from 3, box 1
+				AcquireLockRPC : Lock 0 acquired by machine 3 from mail Box Number 1
+				ServerHeart : Got "6 0 0" from 3, box 1
+				CVWaitRPC : Lock 0 is made FREE by machine 3 mail Box No.1 since no waiters for lock
+				CVWaitRPC : Machine 3 from mail box number 1 going on WAIT in CV 0 and Lock 0
+				ServerHeart : Got "1 waitLock" from 4, box 1
+				CreateLockRPC : Lock already exists with the same name waitLock
+				CreateLockRPC : reply message is -> 0 : Lock already exists
+				ServerHeart : Got "5 waitCV" from 4, box 1
+				CreateCVRPC : CV already exists with the same name waitCV
+				CreateCVRPC : reply message is -> 0 : CV already exists
+				ServerHeart : Got "2 0" from 4, box 1
+				AcquireLockRPC : Lock 0 acquired by machine 4 from mail Box Number 1
+				ServerHeart : Got "8 0 -10" from 4, box 1
+				ServerHeart : Got "8 -10 0" from 4, box 1
+				ServerHeart : Got "8 0 0" from 4, box 1
+				ServerHeart : Got "3 0" from 4, box 1
+				ReleaseLockRPC : Lock 0 released by machine 4 from mail Box Number 1
+				ReleaseLockRPC : Lock 0 acquired by machine 1 from mail Box Number 1
+				ServerHeart : Got "3 0" from 1, box 1
+				ReleaseLockRPC : Lock 0 released by machine 1 from mail Box Number 1
+				ReleaseLockRPC : Lock 0 acquired by machine 2 from mail Box Number 1
+				ServerHeart : Got "3 0" from 2, box 1
+				ReleaseLockRPC : Lock 0 released by machine 2 from mail Box Number 1
+				ReleaseLockRPC : Lock 0 acquired by machine 3 from mail Box Number 1
+				ServerHeart : Got "3 0" from 3, box 1
+
+			
+			+ Waiting client side(all three waiting client ouput are similar and just use client 1 to represent):
+			
+				Enter the STEP no. you want to run here ->1
+
+				-----------------------------------------------------------------------------------------
+								BROADCAST CV RPC TEST CASE      - TO MAKE MACHINES GO ON WAIT BEFORE BROADCASTING A SIGNAL
+				-------------------------------------------------------------------------------------------
+
+						INITIAL SETUP : CREATE CV FOR CONDITION WAITING
+				CreateCV_Syscall : Client sending the message to the server
+				CreateCV_Syscall : CV Index received from server is 0
+				BroadcastCV_Wait_RPC_test : CV Created with Index 0 for condition waiting
+				-----------------------------------------------------------------
+
+						INITIAL SETUP : CREATE LOCK FOR CONDITION WAITING
+				CreateLock_Syscall : Client sending the Create Lock request to the server
+				CreateLock_Syscall : Lock Index received from server is 0
+				BroadcastCV_Wait_RPC_test : Lock Created with Index 0 for condition waiting
+				-----------------------------------------------------------------
+
+						INITIAL SETUP : ACQUIRE A LOCK FOR CONDITION WAITING
+				Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+				Acquire_Syscall : Acquired Lock Index received from server is 0
+				BroadcastCV_Wait_RPC_test : Lock Acquired with Index 0 for condition waiting
+				-----------------------------------------------------------------
+
+						TEST            CONDITION WAITING WITH VALID LOCK AND CV
+				NOTE TO GRADER: Since the current machine has been put into wait
+								you can see the server has not replied to the client.
+
+								Please complete the 3 STEPS to make 3 machines go on wait on same CV
+								If you are in STEP 3 then open one more window with a different
+								instance of Nachos running on it. Once you see the TEST CASES MENU
+								Please select the STEP 4 to broadcast the signal to all the waiters
+
+				Wait_Syscall : Client sending the wait request to the server
+				Wait_Syscall : Server replied after the CV 0 wait request
+				Wait_Syscall : CV index received from server is 0
+				BroadcastCV_Wait_RPC_test : Thread is back from wait on CV 0
+				-----------------------------------------------------------------
+
+						RELEASE A LOCK AFTER COMING OUT OF WAIT
+				Release_Syscall : Client sending the Release Lock 0 request to the server
+				Release_Syscall : Server replied for release lock request
+				ReleaseLock_Syscall : Released Lock Index received from server is 0
+				BroadcastCV_Wait_RPC_test : Release the Lock 0 after coming out of wait
+
+			+ Signal client side:
+
+				Enter the STEP no. you want to run here ->4
+				-----------------------------------------------------------------
+
+						INITIAL SETUP :CREATE LOCK FOR BROADCASTING THE WAITERS
+				CreateLock_Syscall : Client sending the Create Lock request to the server
+				CreateLock_Syscall : Lock Index received from server is 0
+				BroadcastCV_RPC_test : Lock Created with Index 0 for broadcasting the waiters
+
+						INITIAL SETUP : CREATE CV FOR BROADCASTING THE WAITERS
+				CreateCV_Syscall : Client sending the message to the server
+				CreateCV_Syscall : CV Index received from server is 0
+				BroadcastCV_RPC_test : CV Created with Index 0 for broadcasting the waiters
+				-----------------------------------------------------------------
+
+						INITIAL SETUP : ACQUIRE A LOCK BROADCASTING THE WAITERS
+				Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+				Acquire_Syscall : Acquired Lock Index received from server is 0
+				BroadcastCV_RPC_test : Lock 0 Acquired for broadcasting the waiters
+				-----------------------------------------------------------------
+
+						TEST1 :         BROADCASTING THE WAITERS WITH INVALID LOCK
+				Broadcast_Syscall : Client sending the Broadcast request to the server
+				Broadcast_Syscall : Server replied after Broadcast request
+				Broadcast_Syscall : FAILURE : Invalid Lock index -10
+
+				BroadcastCV_RPC_test : Could not broadcast the waiters waiting on CV 0 using the Lock
+				-----------------------------------------------------------------
+
+						TEST2 :         BROADCASTING THE WAITERS WITH INVALID CV
+				Broadcast_Syscall : Client sending the Broadcast request to the server
+				Broadcast_Syscall : Server replied after Broadcast request
+				Broadcast_Syscall : FAILURE : Invalid CV index 0
+
+				BroadcastCV_RPC_test : Could not broadcast the waiters waiting on CV 0 using the Lock
+				-----------------------------------------------------------------
+
+						TEST3 :         BROADCASTING THE WAITERS WAITING WITH VALID CV AND VALID LOCK
+				Broadcast_Syscall : Client sending the Broadcast request to the server
+				Broadcast_Syscall : Server replied after Broadcast request
+				Broadcast_Syscall : Broadcast CV index received from server is 0
+				BroadcastCV_RPC_test : Broadcasted the waiters(if any) waiting on CV 0 using the Lock
+				-----------------------------------------------------------------
+
+						RELEASE A LOCK AFTER BROADCASTING THE WAITERS
+				Release_Syscall : Client sending the Release Lock 0 request to the server
+				Release_Syscall : Server replied for release lock request
+				ReleaseLock_Syscall : Released Lock Index received from server is 0
+				BroadcastCV_RPC_test : Release the Lock 0 after broadcasting the waiters
+				-----------------------------------------------------------------
+
+				NOTE TO GRADER : If any of the first 3 STEPS were executed before this STEP 4
+								Then now you can see those machines which were waiting on the CV are back from WAIT
+			
+	-----------------
+	Destroy CV Syscall RPC Test
+	-----------------
+		
+		+ How to test
+		
+			Open three nachos windows and choose one as server one as the client waiting in CV the other as 
+			the client who actual issue the destroy lock. The server is in the network directory and use command
+			nachos -SERVER -m 0 to run server instance. In the client sides, both run nachos client instance use 
+			the command nachos -m 1/2 -o 0 -x ../test/rpctest and notice we should use different number for the 
+			client to run instance. Then in first nachos client windows we choos the test number by entering "8" 
+			and then choose "1" to make it as a waiting client for this CV. In the second nachos window, we also
+			choose the "8" test but then choose	"2" to make it become the destroyer to destroy the CV. Then we 
+			can see the result of the test.
+		
+		+ Details for this test
+		
+			The step 1 of this test works just like a simple waiting test. It creates a lock and a CV for test.
+			Then this client acquire the lock and use it to wait in the condition. The second step contains several
+			work as follows. First it also create the lock and CV and acquire the lock for test. Then it issue a 
+			destroy CV and since there is other client in the waiting CV it would not destroy immediately. After 
+			that we issue a CV wait again from this client, and receive a failure message because
+			this CV is going to be destroyed. Then we Signal the waiting client and delete the CV in the server 
+			and we can see the waiting client is out of waiting status and the CV is 
+			already destroyed.
+		
+		+ Test output
+		
+			+ server side:
+				
+				ServerHeart : Got "1 DestroyCVLock" from 1, box 1
+				CreateLockRPC : reply message is -> 0
+				ServerHeart : Got "5 waitCV" from 1, box 1
+				CV name requested waitCV
+				cvsDBIndex is -1
+				CreateCVRPC : reply message is -> 0
+				ServerHeart : Got "2 0" from 1, box 1
+				AcquireLockRPC : Lock 0 acquired by machine 1 from mail Box Number 1
+				ServerHeart : Got "6 0 0" from 1, box 1
+				CVWaitRPC : Lock 0 is made FREE by machine 1 mail Box No.1 since no waiters for lock
+				CVWaitRPC : Machine 1 from mail box number 1 going on WAIT in CV 0 and Lock 0
+				ServerHeart : Got "1 DestroyCVLock" from 2, box 1
+				CreateLockRPC : Lock already exists with the same name DestroyCVLock
+				CreateLockRPC : reply message is -> 0 : Lock already exists
+				ServerHeart : Got "5 waitCV" from 2, box 1
+				CV name requested waitCV
+				cvsDBIndex is 0
+				CreateCVRPC : CV already exists with the same name waitCV
+				CreateCVRPC : reply message is -> 0 : CV already exists
+				ServerHeart : Got "2 0" from 2, box 1
+				AcquireLockRPC : Lock 0 acquired by machine 2 from mail Box Number 1
+				ServerHeart : Got "9 0" from 2, box 1
+				ServerHeart : Got "7 0 0" from 2, box 1
+				ServerHeart : Got "3 0" from 2, box 1
+				ReleaseLockRPC : Lock 0 released by machine 2 from mail Box Number 1
+				ReleaseLockRPC : Lock 0 acquired by machine 1 from mail Box Number 1
+				ServerHeart : Got "3 0" from 1, box 1
+				ServerHeart : Got "9 0" from 1, box 1
+				DestroyCVRPC : CV 0 Destroyed by machine 1 from mail Box Number 1
+
+
+			+ waiting client side:
+			
+				-----------------------------------------------------------------
+
+						INITIAL SETUP : CREATE LOCK FOR DESTROYING A CV AFTER WAIT-SIGNAL IS DONE
+				CreateLock_Syscall : Client sending the Create Lock request to the server
+				CreateLock_Syscall : Lock Index received from server is 0
+				CreateLock_Syscall : Msg fron Server : 0
+				DestroyCV_Wait_RPC_test : Lock 0 Created for destroying a CV after wait-signal is done
+				-----------------------------------------------------------------
+
+						INITIAL SETUP : CREATE CV FOR DESTROYING A CV AFTER WAIT-SIGNAL IS DONE
+				CreateCV_Syscall : Client sending the message to the server
+				CreateCV_Syscall : CV Index received from server is 0
+				CreateCV_Syscall : Msg fron Server : 0
+				DestroyCV_Wait_RPC_test : CV 0 Created for destroying a CV after wait-signal is done
+				-----------------------------------------------------------------
+
+						INITIAL SETUP : ACQUIRE A LOCK FOR GOING IN WAIT ON CV
+				Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+				Acquire_Syscall : Acquired Lock Index received from server is 0
+				Acquire_Syscall : Msg fron Server : 0 : Lock 0 is Acquired
+				DestroyCV_Wait_RPC_test : Lock 0 Acquired for going on wait
+				-----------------------------------------------------------------
+
+						TEST4           CONDITION WAITING WITH VALID LOCK AND CV
+				NOTE TO GRADER: Since the current machine has been put into wait
+								you can see the server has not replied to the client.
+
+								To make the current machine come out of wait, you need to open another
+								Window with a different instance of Nachos running on it. Once you see
+								the TEST CASES MENU, please select the "STEP 2" under "Destroy CV test case"
+
+				Wait_Syscall : Client sending the wait request to the server
+				Wait_Syscall : Server replied after the CV 0 wait request
+				Wait_Syscall : CV index received from server is 0
+				Wait_Syscall : Msg fron Server : 0 : Lock 0 is Acquired
+				DestroyCV_Wait_RPC_test : Thread is back from wait on CV 0
+				-----------------------------------------------------------------
+
+						RELEASE A LOCK AFTER COMING OUT OF WAIT
+				Release_Syscall : Client sending the Release Lock 0 request to the server
+				Release_Syscall : Server replied for release lock request
+				ReleaseLock_Syscall : Released Lock Index received from server is 0
+				ReleaseLock_Syscall : Msg fron Server : 0 : Lock 0 is Released
+				DestroyCV_Wait_RPC_test : Release the Lock 0 after coming out of wait
+				-----------------------------------------------------------------
+
+						TEST1 : DESTROY A CV AFTER COMING OUT OF WAIT
+				DestroyCV_Syscall : Client sending the Destroy CV 0 request to the server
+				DestroyCV_Syscall : Server replied after destroy CV request
+				DestroyCV_Syscall : Destroyed CV Index received from server is 0
+				DestroyCV_Syscall : Msg fron Server : 0 : CV 0 is Destroyed
+				DestroyCV_Wait_RPC_test : CV was Destroyed
+				Machine halting!
+
+			+ destroy client side:
+				
+				Enter the STEP no. you want to run here ->2
+
+				-----------------------------------------------------------------
+
+						INITIAL SETUP : CREATE LOCK FOR DESTROYING A CV AFTER WAIT-SIGNAL IS DON                                                                                        E
+				CreateLock_Syscall : Client sending the Create Lock request to the server
+				CreateLock_Syscall : Lock Index received from server is 0
+				CreateLock_Syscall : Msg fron Server : 0 : Lock already exists
+				DestroyCV_Signal_RPC_test : Lock 0 Created for destroying a CV after wait-signal                                                                                         is done
+				-----------------------------------------------------------------
+
+						INITIAL SETUP : CREATE CV FOR DESTROYING A CV AFTER WAIT-SIGNAL IS DONE
+				CreateCV_Syscall : Client sending the message to the server
+				CreateCV_Syscall : CV Index received from server is 0
+				CreateCV_Syscall : Msg fron Server : 0 : CV already exists
+				DestroyCV_Signal_RPC_test : CV 0 Created for destroying a CV after wait-signal i                                                                                        s done
+				-----------------------------------------------------------------
+
+						INITIAL SETUP : ACQUIRE A LOCK FOR GOING ON WAIT IN CV
+				Acquire_Syscall : Client sending the AcquireLock 0 request to the server
+				Acquire_Syscall : Acquired Lock Index received from server is 0
+				Acquire_Syscall : Msg fron Server : 0 : Lock 0 is Acquired
+				DestroyCV_Signal_RPC_test : Lock 0 Acquired for signalling a waiter
+				-----------------------------------------------------------------
+
+						TEST1 : DESTROY A CV WHICH HAS A WAITER IN IT
+				DestroyCV_Syscall : Client sending the Destroy CV 0 request to the server
+				DestroyCV_Syscall : Server replied after destroy CV request
+				DestroyCV_Syscall : Destroyed CV Index received from server is 0
+				DestroyCV_Syscall : Msg fron Server : 0 : CV 0 is going to be Destroyed
+				DestroyCV_Signal_RPC_test : CV was Destroyed
+				-----------------------------------------------------------------
+
+						TEST3           SIGNALLING A WAITER WAITING ON CV 0
+				Signal_Syscall : Client sending the signal request to the server
+				Signal_Syscall : Server replied after signal request
+				Signal_Syscall : CV index received from server is 0
+				Signal_Syscall : Msg fron Server : 0 : CV 0 Signal completed with lock 0
+				DestroyCV_Signal_RPC_test : Signalled a waiter(if any) waiting on CV 0 using the                                                                                         Lock
+				-----------------------------------------------------------------
+
+						RELEASE A LOCK AFTER SIGNALLING A WAITER
+				Release_Syscall : Client sending the Release Lock 0 request to the server
+				Release_Syscall : Server replied for release lock request
+				ReleaseLock_Syscall : Released Lock Index received from server is 0
+				ReleaseLock_Syscall : Msg fron Server : 0 : Lock 0 is Released
+				DestroyCV_Signal_RPC_test : Release the Lock 0 after signalling a waiter
+				-----------------------------------------------------------------
+
+				NOTE TO GRADER : (If any waiters were there in the CV wait queue) Now you can se                                                                                        e
+								the machine which was waiting on the CV on the other window is b                                                                                        ack
+								from WAIT. Now the Wait queue is empty so the CV is deallocated                                                                                         successfully
+				Machine halting!
+							
+	-----------------
+	Create Monitor Variable RPC Test
+	-----------------			
+
+		+ How to test
+			
+			Very similar to the create lock RPC test. Open two nachos windows, and choose one as server 
+			another as the client. In the server side under the networking directory, use command
+			nachos -SERVER -m 0 to run server instance. In the client which we should input command 
+			nachos -m 1 -o 0 -x ../test/rpctest. Then the user has to enter "9" to test for Create a
+			Monitor variable RPC. This tests for Create monitorvariable RPC, has 4 different parts as follows:
+			1. Create MV with valid parameters
+			2. Create MV with invalid length
+			3. Create MV with same name
+			4. Create MV with no name
+	
+		+ Details for this test
+			
+			Create Monitorvariable RPC test is similar with the the Create lock RPC test. In these 4 situation,
+			we pass the valid parameter and receive the index for this condition. And in the rest failure cases
+			like second and fourth one we give the invalid length or create with 
+			no name which represent create without right virtual address. The third case is to create the same 
+			condition again and we should get the correct index number instead of failure message.
+
+		+ Test output
+			
+			+ server side:
+			
+				ServerHeart : Got "10 newMV" from 1, box 1
+				CreateMVRPC : reply message is -> 0
+				ServerHeart : Got "10 newMV" from 1, box 1
+				CreateMVRPC : MV already exists with the same name newMV
+				CreateMVRPC : reply message is -> 0 : MV already exists
+				ServerHeart : Got "10 " from 1, box 1
+				ServerHeart : MV Name not sent to the Server
+	
+			+ client side:
+				
+				-----------------------------------------------------------------
+								CREATE MONITOR VARIABLE TEST CASE
+				-----------------------------------------------------------------
+
+						TEST1           CREATE MV WITH VALID PARAMETERS
+				CreateMV_Syscall : Client sending the Create MV request to the server
+				CreateMV_Syscall : MV Index received from server is 0
+				CreateMV_RPC_test : MV Created with Index 0
+				-----------------------------------------------------------------
+
+						TEST2           CREATE MV WITH INVALID LENGTH
+				CreateMV_Syscall : Invalid Virtual address length
+				CreateMV_RPC_test : MV was not Created
+				-----------------------------------------------------------------
+
+						TEST3           CREATE MV WITH THE SAME NAME
+				CreateMV_Syscall : Client sending the Create MV request to the server
+				CreateMV_Syscall : MV Index received from server is 0
+				CreateMV_RPC_test : MV Created with Index 0
+				-----------------------------------------------------------------
+
+						TEST4           CREATE MV WITH NO NAME
+				CreateMV_Syscall : Client sending the Create MV request to the server
+				CreateMV_Syscall : FAILURE : MV Name is NULL
+				CreateMV_RPC_test : MV was not Created
+
+	-----------------
+	Get Monitor Variable RPC Test
+	-----------------						
+				
+	+ How to test
+		
+		Similar to acquire lock test case. Open two nachos windows, and choose one as server another
+		as the client. In the server side under the networking directory, use command	
+		nachos -SERVER -m 0 to run server instance. In the client which we should input command 
+		nachos -m 1 -o 0 -x ../test/rpctest. Then the user has to 
+		enter "10" to test for Get Monitor Variable RPC. This tests for Get Monitor Variable RPC,
+		has 2 different parts as follows:
+		1. Get monitor variable value with invalid parameter after created
+		2. Get monitor variable value with valid parameter after created
+
+	+ Details for this test
+		
+		As the monitor variable do not have the status and it can be access by any client. So the way of getting
+		it is find the right index value. So we check the index value when we call this RPC and as after the MV 
+		created the initial value is 0 so we will get 0 if success. And we also check
+		the index value in the client side if it is less then 0 we do not pass this value to the server.
+			
+	+ Test output
+	
+		+ server side:
+			
+			ServerHeart : Got "10 newMV" from 1, box 1
+			CreateMVRPC : reply message is -> 0
+			ServerHeart : Got "11 0" from 1, box 1
+		
+		+ client side:
+		
+			-----------------------------------------------------------------
+							GET MONITOR VARIABLE    TEST CASE
+			-----------------------------------------------------------------
+
+					INITIAL SETUP :         CREATE MV WITH VALID PARAMETERS
+			CreateMV_Syscall : Client sending the Create MV request to the server
+			CreateMV_Syscall : MV Index received from server is 0
+			GetMV_RPC_test : MV Created with Index 0
+			-----------------------------------------------------------------
+
+					TEST1           GET MV VALUE WITH INVALID MV INDEX
+			GetMV_Syscall : Invalid MV Index received
+			GetMV_RPC_test : MV value was not fetched from server
+			-----------------------------------------------------------------
+
+					TEST2           GET MV VALUE WITH VALID MV INDEX
+			GetMV_Syscall : Client sending the Get MV value request to the server
+			GetMV_Syscall : Value of the MV received from server is 0
+			GetMV_RPC_test : MV value was fetched from server is 0
+			
+	-----------------
+	Set Monitor Variable RPC Test
+	-----------------						
+			
+		+ How to test
+				
+			Similar to Get Mointor Variable RPC test case. Open two nachos windows, and choose one as server
+			another as the client. In the server side under the networking directory, use command	
+			nachos -SERVER -m 0 to run server instance. In the client which we should input command 
+			nachos -m 1 -o 0 -x ../test/rpctest. Then the user has to enter "10" to test for Set 
+			Monitor Variable RPC. This tests for Set Monitor Variable RPC, has 3 different parts as follows:
+			1. Set monitor variable value with invalid parameter after created
+			2. Set monitor variable value with valid parameter after created
+			3. Get same monitor variable value after we set it
+			
+		+ Details for this test
+				
+			Very similar with the get monitor variable RPC we check the index value when we call this RPC. 
+			With the right index we can change the value which stored inside the server.
+			And in order to test whether the set is successful we get it value after we set it. This value
+			should be same with what we seted before.
+		
+		+ Test output
+		
+			+ server side:
+
+				ServerHeart : Got "10 newMV" from 1, box 1
+				CreateMVRPC : reply message is -> 0
+				ServerHeart : Got "12 0 10" from 1, box 1
+				ServerHeart : Got "11 0" from 1, box 1
+
+			+ client side:
+			
+				-----------------------------------------------------------------
+								SET MONITOR VARIABLE    TEST CASE
+				-----------------------------------------------------------------
+
+						INITIAL SETUP :         CREATE MV WITH VALID PARAMETERS
+				CreateMV_Syscall : Client sending the Create MV request to the server
+				CreateMV_Syscall : MV Index received from server is 0
+				SetMV_RPC_test : MV Created with Index 0
+				-----------------------------------------------------------------
+
+						TEST1           SET MV VALUE WITH INVALID MV INDEX
+				SetMV_Syscall : Invalid MV Index received
+				SetMV_RPC_test : MV value was not set in server
+				-----------------------------------------------------------------
+
+						TEST2           SET MV VALUE WITH VALID MV INDEX
+				SetMV_Syscall : Client sending the Set MV value request to the server
+				SetMV_Syscall : Value of the MV received from server is 10
+				SetMV_RPC_test : MV value was set to 10 in server
+				-----------------------------------------------------------------
+
+						TEST3           GET MV VALUE WITH VALID MV INDEX
+				GetMV_Syscall : Client sending the Get MV value request to the server
+				GetMV_Syscall : Value of the MV received from server is 10
+				SetMV_RPC_test : MV value was fetched from server is 10		
+			
+	-----------------
+	Destroy Monitor Variable RPC Test
+	-----------------	
+
+		+ How to test
+				
+			Similar to Get Mointor Variable RPC test case. Open three nachos windows, and choose one 
+			as server other as the clients. In the server side under the networking directory, 
+			use command	nachos -SERVER -m 0 to run server instance. In the client which we should 
+			input command nachos -m 1 -o 0 -x ../test/rpctest and nachos -m 2 -o 0 -x ../test/rpctest. 
+			Then the user has to enter "12" to test for Destroy Monitor Variable RPC. This tests for Destroy 
+			Monitor Variable RPC, has 4 different steps as follows:
+			1. Make machine 1 Create a MV 
+			2. Make machine 2 Create the same MV 
+			3. Make machine 1 Destroy the MV 
+			4. Make machine 2 also to Destroy the MV 
+				
+		+ Details for this test
+		
+			The initial step for destroy MV RPC is to create it.  Then after we create it twice and destroy
+			it twice. If the destroy counter work correctly we can destroy it in the second time.
+		
+		+ Test output
+		
+			+ server side:		
+
+				ServerHeart : Got "10 newMV" from 1, box 0
+				CreateMVRPC : reply message is -> 0
+				ServerHeart : Got "10 newMV" from 2, box 0
+				CreateMVRPC : MV already exists with the same name newMV
+				CreateMVRPC : reply message is -> 0 : MV already exists
+				ServerHeart : Got "13 0" from 1, box 0
+				DestroyMVRPC : reply message is -> 0 : MV 0 is going to be Destroyed
+				ServerHeart : Got "13 0" from 2, box 0
+				DestroyMVRPC : reply message is -> 0 : MV 0 is Destroyed successfully
+								
+			+ client 1 side:
+			
+				Enter the STEP no. you want to run here ->1
+
+				-----------------------------------------------------------------
+								DESTROY MONITOR VARIABLE        TEST CASE - STEP 1
+				-----------------------------------------------------------------
+
+				-----------------------------------------------------------------
+
+						INITIAL SETUP :         CREATE MV WITH VALID PARAMETERS
+				CreateMV_Syscall : Client sending the Create MV request to the server
+				CreateMV_Syscall : MV Index received from server is 0
+				CreateMV_Syscall : Msg fron Server : 0
+				Destroy_MV_W1_Create : MV Created with Index 0
+				Machine halting!
+
+				Enter the STEP no. you want to run here ->3
+
+				-----------------------------------------------------------------
+								DESTROY MONITOR VARIABLE        TEST CASE - STEP 3
+				-----------------------------------------------------------------
+				-----------------------------------------------------------------
+
+						TEST1           DESTROY MV VALUE WITH VALID MV INDEX
+				DestroyMV_Syscall : Client sending the Destroy MV request to the server
+				DestroyMV_Syscall : Value of the MV received from server is 0
+				DestroyMV_Syscall : Msg fron Server : 0 : MV 0 is going to be Destroyed
+				Destroy_MV_W1_Destroy : MV 0 was destroyednMachine halting!
+
+			+ client 2 side:
+			
+				Enter the STEP no. you want to run here ->2
+
+				-----------------------------------------------------------------
+								DESTROY MONITOR VARIABLE        TEST CASE - STEP 2
+				-----------------------------------------------------------------
+
+				-----------------------------------------------------------------
+
+						INITIAL SETUP :         CREATE MV WITH VALID PARAMETERS
+				CreateMV_Syscall : Client sending the Create MV request to the server
+				CreateMV_Syscall : MV Index received from server is 0
+				CreateMV_Syscall : Msg fron Server : 0 : MV already exists
+				Destroy_MV_W2_Create : MV Created with Index 0
+				Machine halting!
+				
+				Enter the STEP no. you want to run here ->4
+
+				-----------------------------------------------------------------
+								DESTROY MONITOR VARIABLE        TEST CASE - STEP 4
+				-----------------------------------------------------------------
+				-----------------------------------------------------------------
+
+						TEST1           DESTROY MV VALUE WITH VALID MV INDEX
+				DestroyMV_Syscall : Client sending the Destroy MV request to the server
+				DestroyMV_Syscall : Value of the MV received from server is 0
+				DestroyMV_Syscall : Msg fron Server : 0 : MV 0 is Destroyed successfully
+				Destroy_MV_W2_Destroy : MV 0 was destroyed
+				Machine halting!
+
+	
+------------------
+VI. Discussion: 
+------------------
+
+	+ Part 1 and Part 2
+
+	     + Experiment expectation. 
+	
+		The TLB implemented gets populated along with the IPT and the TLB is invalidated
+		on a context switch or whenever the page is evicted from the memory. The virtual
+		memory implementation works fine for all the user programs like matmult and sort.
+		
+	     + Experiment Result
+
+		The User programs runs successfully for NumPhysPages
+		reduced to 32 and generates the expected resulted.
+	
+	     +  Explanation 
+
+		The TLB and IPT gets populated and invalidated and the dirty pages
+		are written and read from the swapfile when ever required. The virtual
+		memory works fine and computes the appropriate results for user programs.
+
+	
+	+ Part3
+
+	    + Experiment expectation. 
+				
+		The experiment require the nachos can work under the network condition. Make every nachos 
+		instance can communicate with the server and share the same	resource which is managed by the 
+		server. By implement different remote procedure calls make client and server can perform different works.
+			
+	+ Experiment result
+		
+		All the RPC function have been designed, implemented and tested to ensure safe working in
+		Nachos. We can achieve the communication among the clients and 
+		server. and make them share resources under the server's supervision. 
+		
+	+	Explanatiation
+	
+		The test case shows all the RPC works fine. The locks, conditions and the global variable
+		can be accessed by the client when they use the correct parameter
+		And the communication among them also match the expectation.
+		
+		
